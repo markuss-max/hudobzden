@@ -1,9 +1,10 @@
 window.LP = window.LP || {};
 
 (function (LP) {
-  let activeInputTab = 'quick'; // 'quick' | 'fav' | 'manual'
+  let activeInputTab = 'quick'; // 'quick' | 'fav' | 'manual' | 'ai'
   let activeFeedTab = 'mine'; // 'mine' | 'partner'
   let presetSearchQuery = '';
+  let aiParsedItems = [];
 
   function renderTodayView(container, state, { onRefresh, onNavigate }) {
     const {
@@ -165,10 +166,11 @@ window.LP = window.LP || {};
             <span class="page-subtitle">В 1–2 касания</span>
           </div>
 
-          <div class="segmented">
+          <div class="segmented" style="grid-template-columns: repeat(4, 1fr);">
             <button class="seg-btn ${activeInputTab === 'quick' ? 'active' : ''}" data-input-tab="quick" type="button">⚡ Быстро</button>
-            <button class="seg-btn ${activeInputTab === 'fav' ? 'active' : ''}" data-input-tab="fav" type="button">❤️ Избранное</button>
-            <button class="seg-btn ${activeInputTab === 'manual' ? 'active' : ''}" data-input-tab="manual" type="button">✏️ Вручную</button>
+            <button class="seg-btn ${activeInputTab === 'fav' ? 'active' : ''}" data-input-tab="fav" type="button">❤️ Избр.</button>
+            <button class="seg-btn ${activeInputTab === 'manual' ? 'active' : ''}" data-input-tab="manual" type="button">✏️ Ручной</button>
+            <button class="seg-btn ${activeInputTab === 'ai' ? 'active' : ''}" data-input-tab="ai" type="button">✨ ИИ</button>
           </div>
 
           ${renderFoodInputBody(favorites, escapeHtml)}
@@ -289,6 +291,40 @@ window.LP = window.LP || {};
             )
             .join('')}
         </div>
+      `;
+    }
+
+    if (activeInputTab === 'ai') {
+      return `
+        <form id="ai-food-form" style="display:flex; flex-direction:column; gap:10px;">
+          <textarea class="textarea" name="prompt" placeholder="Например: две жареные картошки, котлета и чай с 2 ложками сахара"></textarea>
+          <button class="btn btn-primary btn-block" id="ai-parse-btn" type="submit">Распознать калории ✨</button>
+        </form>
+        ${
+          aiParsedItems.length > 0
+            ? `
+          <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
+            <div class="row-between">
+              <span class="field-label">Найдено блюд: ${aiParsedItems.length}</span>
+              <button class="btn btn-mint btn-sm" id="ai-add-all-btn" type="button">Добавить всё (+${aiParsedItems.reduce((s, i) => s + i.calories, 0)} ккал)</button>
+            </div>
+            ${aiParsedItems
+              .map(
+                (item, idx) => `
+              <div class="log-item">
+                <div class="log-info">
+                  <div class="log-title">${escapeHtml(item.name)}</div>
+                  <div class="log-meta">~${item.calories} ккал</div>
+                </div>
+                <button class="btn btn-sm btn-lavender-soft" data-ai-add-one="${idx}" type="button">+ Добавить</button>
+              </div>
+            `
+              )
+              .join('')}
+          </div>
+          `
+            : ''
+        }
       `;
     }
 
@@ -422,6 +458,55 @@ window.LP = window.LP || {};
         await onRefresh();
       });
     }
+
+    const aiForm = container.querySelector('#ai-food-form');
+    if (aiForm) {
+      aiForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const prompt = new FormData(aiForm).get('prompt');
+        const btn = container.querySelector('#ai-parse-btn');
+        btn.disabled = true;
+        btn.textContent = 'Считаю калории... ✨';
+        try {
+          aiParsedItems = await LP.geminiService.parseFoodWithGemini(prompt);
+          if (!aiParsedItems.length) {
+            LP.toast.showToast('Не удалось распознать блюда, попробуйте уточнить', 'warn');
+          }
+          renderTodayView(container, state, { onRefresh, onNavigate });
+        } catch (err) {
+          if (err.message === 'NO_GEMINI_KEY') {
+            LP.toast.showToast('Укажите Gemini API Key во вкладке «Профиль» 🔑', 'warn', 4500);
+            onNavigate('profile');
+          } else {
+            LP.toast.showToast(err.message || 'Ошибка Gemini API', 'error');
+          }
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+
+    const aiAddAll = container.querySelector('#ai-add-all-btn');
+    if (aiAddAll) {
+      aiAddAll.addEventListener('click', async () => {
+        await LP.dataService.addFoodItems(aiParsedItems, state);
+        aiParsedItems = [];
+        LP.toast.showToast('Все блюда добавлены! 🍽️', 'success');
+        await onRefresh();
+      });
+    }
+
+    container.querySelectorAll('[data-ai-add-one]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const idx = Number(btn.dataset.aiAddOne);
+        const item = aiParsedItems[idx];
+        if (!item) return;
+        await LP.dataService.addFoodItems([item], state);
+        aiParsedItems.splice(idx, 1);
+        LP.toast.showToast(`Добавлено: ${item.name}`, 'success');
+        await onRefresh();
+      });
+    });
 
     container.querySelectorAll('[data-del-food]').forEach((btn) => {
       btn.addEventListener('click', async () => {

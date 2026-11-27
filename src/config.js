@@ -4,6 +4,7 @@ window.LP = window.LP || {};
   const STORAGE_KEYS = {
     SUPABASE_URL: 'lp_supabase_url',
     SUPABASE_ANON_KEY: 'lp_supabase_anon_key',
+    GEMINI_API_KEY: 'lp_gemini_api_key',
     LAST_DAY_CELEBRATED: 'lp_last_celebrated_day',
   };
 
@@ -22,14 +23,24 @@ window.LP = window.LP || {};
     { id: 'active', label: 'Высокая (6–7 тренировок)', factor: 1.725 },
   ];
 
+  function normalizeSupabaseUrl(raw) {
+    const trimmed = (raw || '').trim();
+    if (!trimmed) return '';
+    try {
+      return new URL(trimmed).origin;
+    } catch {
+      return trimmed.replace(/\/+$/, '');
+    }
+  }
+
   function getSupabaseConfig() {
-    const url = (localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) || DEFAULT_SUPABASE_URL).trim();
+    const url = normalizeSupabaseUrl(localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) || DEFAULT_SUPABASE_URL);
     const anonKey = (localStorage.getItem(STORAGE_KEYS.SUPABASE_ANON_KEY) || DEFAULT_SUPABASE_ANON_KEY).trim();
     return { url, anonKey, isConfigured: Boolean(url && anonKey) };
   }
 
   function saveSupabaseConfig(url, anonKey) {
-    localStorage.setItem(STORAGE_KEYS.SUPABASE_URL, (url || '').trim());
+    localStorage.setItem(STORAGE_KEYS.SUPABASE_URL, normalizeSupabaseUrl(url));
     localStorage.setItem(STORAGE_KEYS.SUPABASE_ANON_KEY, (anonKey || '').trim());
   }
 

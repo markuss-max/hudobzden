@@ -2,9 +2,10 @@ window.LP = window.LP || {};
 
 (function (LP) {
   function renderProfileView(container, state, { onRefresh, onAuthReset }) {
-    const { ACTIVITY_LEVELS, AVATARS } = LP.config;
+    const { ACTIVITY_LEVELS, AVATARS, getGeminiApiKey, saveGeminiApiKey } = LP.config;
     const { calculateMifflinStJeor, estimateMonthlyWeightChange, escapeHtml } = LP.calories;
     const { profile, couple } = state;
+    const geminiKey = getGeminiApiKey();
 
     const calc = calculateMifflinStJeor({
       sex: profile.sex || 'female',
@@ -130,6 +131,20 @@ window.LP = window.LP || {};
         </div>
 
         <div class="card">
+          <div class="card-header">
+            <span class="card-title">✨ Google Gemini API Key</span>
+            ${geminiKey ? '<span class="badge badge-mint">Указан</span>' : '<span class="badge badge-yellow">Не задан</span>'}
+          </div>
+          <p class="page-subtitle" style="margin-bottom:10px;">
+            Ключ сохраняется только в вашем браузере и нужен для вкладки «✨ ИИ» при добавлении еды.
+          </p>
+          <form id="gemini-key-form" class="row">
+            <input class="input" name="gemini_key" type="password" placeholder="AIzaSy..." value="${escapeHtml(geminiKey)}" />
+            <button class="btn btn-primary" type="submit">Сохранить</button>
+          </form>
+        </div>
+
+        <div class="card">
           <div class="row-between" style="margin-bottom:10px;">
             <span class="card-title">🔗 Комната пары</span>
             <span class="badge badge-lavender">${escapeHtml(couple?.invite_code || '—')}</span>
@@ -218,6 +233,14 @@ window.LP = window.LP || {};
       );
       LP.toast.showToast('Дневной лимит сохранён! 💚', 'success');
       await onRefresh();
+    });
+
+    container.querySelector('#gemini-key-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const key = new FormData(e.target).get('gemini_key');
+      saveGeminiApiKey(key);
+      LP.toast.showToast('Gemini API Key сохранён в браузере 🔑', 'success');
+      renderProfileView(container, state, { onRefresh, onAuthReset });
     });
 
     const signoutBtn = container.querySelector('#signout-btn');
